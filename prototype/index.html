@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Список задач — прототип</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --bg: #f4f5f7;
+      --card: #ffffff;
+      --text: #1f2328;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --accent: #4f46e5;
+      --accent-hover: #4338ca;
+      --danger: #dc2626;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 48px 16px;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 480px;
+      background: var(--card);
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, .08), 0 8px 24px rgba(0, 0, 0, .06);
+      overflow: hidden;
+    }
+
+    header { padding: 24px 24px 16px; }
+    h1 { margin: 0 0 4px; font-size: 22px; }
+    .subtitle { margin: 0; color: var(--muted); font-size: 14px; }
+
+    form { display: flex; gap: 8px; padding: 0 24px 16px; }
+
+    input[type="text"] {
+      flex: 1;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font: inherit;
+    }
+    input[type="text"]:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+
+    button {
+      font: inherit;
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+    }
+
+    .add {
+      padding: 10px 16px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+    }
+    .add:hover { background: var(--accent-hover); }
+
+    .filters {
+      display: flex;
+      gap: 4px;
+      padding: 0 24px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+    .filters button {
+      padding: 4px 10px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .filters button[aria-pressed="true"] { background: #eef2ff; color: var(--accent); font-weight: 600; }
+
+    ul { list-style: none; margin: 0; padding: 0; }
+
+    li {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 24px;
+      border-bottom: 1px solid var(--line);
+    }
+    li input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+    li .title { flex: 1; word-break: break-word; }
+    li.done .title { color: var(--muted); text-decoration: line-through; }
+
+    .remove {
+      padding: 2px 8px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1;
+    }
+    .remove:hover { color: var(--danger); background: #fef2f2; }
+
+    .empty { margin: 0; padding: 32px 24px; text-align: center; color: var(--muted); border-bottom: 1px solid var(--line); }
+
+    footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 24px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .clear { padding: 4px 8px; background: transparent; color: var(--muted); font-size: 14px; }
+    .clear:hover { color: var(--danger); }
+    .clear:disabled { visibility: hidden; }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <h1>Список задач</h1>
+      <p class="subtitle">Простой прототип: задачи хранятся в браузере (localStorage).</p>
+    </header>
+
+    <form id="new-task" autocomplete="off">
+      <input id="task-title" type="text" placeholder="Что нужно сделать?" aria-label="Новая задача" maxlength="200">
+      <button class="add" type="submit">Добавить</button>
+    </form>
+
+    <nav class="filters" aria-label="Фильтр задач">
+      <button type="button" data-filter="all" aria-pressed="true">Все</button>
+      <button type="button" data-filter="active" aria-pressed="false">Активные</button>
+      <button type="button" data-filter="done" aria-pressed="false">Готовые</button>
+    </nav>
+
+    <ul id="tasks"></ul>
+    <p id="empty" class="empty" hidden></p>
+
+    <footer>
+      <span id="counter"></span>
+      <button id="clear-done" class="clear" type="button">Очистить готовые</button>
+    </footer>
+  </main>
+
+  <script>
+    const STORAGE_KEY = 'prototype.tasks';
+    const EMPTY_TEXT = {
+      all: 'Задач пока нет — добавьте первую.',
+      active: 'Активных задач нет.',
+      done: 'Готовых задач пока нет.'
+    };
+
+    const form = document.getElementById('new-task');
+    const titleInput = document.getElementById('task-title');
+    const list = document.getElementById('tasks');
+    const empty = document.getElementById('empty');
+    const counter = document.getElementById('counter');
+    const clearDone = document.getElementById('clear-done');
+    const filterButtons = document.querySelectorAll('.filters button');
+
+    let tasks = load();
+    let filter = 'all';
+
+    function load() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+        return Array.isArray(saved) ? saved : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function save() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    }
+
+    function plural(n, one, few, many) {
+      const mod10 = n % 10;
+      const mod100 = n % 100;
+      if (mod10 === 1 && mod100 !== 11) return one;
+      if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+      return many;
+    }
+
+    function visibleTasks() {
+      if (filter === 'active') return tasks.filter(t => !t.done);
+      if (filter === 'done') return tasks.filter(t => t.done);
+      return tasks;
+    }
+
+    function render() {
+      list.replaceChildren(...visibleTasks().map(task => {
+        const item = document.createElement('li');
+        item.dataset.id = task.id;
+        item.classList.toggle('done', task.done);
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = task.done;
+        checkbox.setAttribute('aria-label', 'Готово');
+
+        const title = document.createElement('span');
+        title.className = 'title';
+        title.textContent = task.title;
+
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'remove';
+        remove.textContent = '×';
+        remove.setAttribute('aria-label', 'Удалить задачу');
+
+        item.append(checkbox, title, remove);
+        return item;
+      }));
+
+      const shown = list.children.length;
+      empty.hidden = shown > 0;
+      empty.textContent = EMPTY_TEXT[filter];
+
+      const left = tasks.filter(t => !t.done).length;
+      counter.textContent = `Осталось ${left} ${plural(left, 'задача', 'задачи', 'задач')}`;
+      clearDone.disabled = !tasks.some(t => t.done);
+
+      filterButtons.forEach(btn => btn.setAttribute('aria-pressed', String(btn.dataset.filter === filter)));
+    }
+
+    function update(next) {
+      tasks = next;
+      save();
+      render();
+    }
+
+    form.addEventListener('submit', event => {
+      event.preventDefault();
+      const title = titleInput.value.trim();
+      titleInput.value = '';
+      titleInput.focus();
+      if (title) update([...tasks, { id: crypto.randomUUID(), title, done: false }]);
+      titleInput.focus();
+    });
+
+    list.addEventListener('change', event => {
+      if (event.target.type !== 'checkbox') return;
+      const id = event.target.closest('li').dataset.id;
+      update(tasks.map(t => (t.id === id ? { ...t, done: event.target.checked } : t)));
+    });
+
+    list.addEventListener('click', event => {
+      if (!event.target.classList.contains('remove')) return;
+      const id = event.target.closest('li').dataset.id;
+      update(tasks.filter(t => t.id !== id));
+    });
+
+    filterButtons.forEach(btn => btn.addEventListener('click', () => {
+      filter = btn.dataset.filter;
+      render();
+    }));
+
+    clearDone.addEventListener('click', () => update(tasks.filter(t => !t.done)));
+
+    render();
+  </script>
+</body>
+</html>
